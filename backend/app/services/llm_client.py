@@ -135,15 +135,46 @@ class LLMClient:
             return resp.choices[0].message.content
 
         if self.chat_provider == "groq":
-            resp = self._chat_client.chat.completions.create(
-                model=settings.groq_chat_model,
-                messages=messages,
+            try:
+                resp = self._chat_client.chat.completions.create(
+                    model=settings.groq_chat_model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                msg = resp.choices[0].message
+                content = getattr(msg, "content", None) or getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None) or ""
+                if content and content.strip():
+                    return content.strip()
+            except Exception as e:
+                log.warning("groq_chat_failed_falling_back_to_gemini", error=str(e))
+            
+            # Fallback to Gemini if Groq fails or returns empty response
+            from google.genai import types
+            gemini_client = self._init_client("gemini")
+            system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
+            contents = []
+            for m in messages:
+                if m["role"] == "system":
+                    continue
+                role = "model" if m["role"] == "assistant" else m["role"]
+                contents.append(
+                    types.Content(
+                        role=role,
+                        parts=[types.Part.from_text(text=m["content"])],
+                    )
+                )
+            config = types.GenerateContentConfig(
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_output_tokens=max_tokens,
+                system_instruction=system_instruction,
             )
-            msg = resp.choices[0].message
-            content = getattr(msg, "content", None) or getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None) or ""
-            return content.strip()
+            resp = gemini_client.models.generate_content(
+                model=settings.gemini_chat_model,
+                contents=contents,
+                config=config,
+            )
+            return resp.text
 
         if self.chat_provider == "gemini":
             from google.genai import types

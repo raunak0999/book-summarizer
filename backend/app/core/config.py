@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24  # 1 day
 
     # --- LLM / Embedding providers: "groq", "gemini", "azure_openai", "github_models", "aws_bedrock", "local", "openai" ---
-    llm_provider: str = "groq"
-    chat_provider: str = "groq"
+    llm_provider: str = "gemini"
+    chat_provider: str = "gemini"
     embedding_provider: str = "gemini"
 
 

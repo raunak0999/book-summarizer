@@ -147,34 +147,38 @@ class LLMClient:
                 if content and content.strip():
                     return content.strip()
             except Exception as e:
-                log.warning("groq_chat_failed_falling_back_to_gemini", error=str(e))
+                log.warning("groq_chat_failed_falling_back_to_gemini_immediately", error=str(e))
             
-            # Fallback to Gemini if Groq fails or returns empty response
-            from google.genai import types
-            gemini_client = self._init_client("gemini")
-            system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
-            contents = []
-            for m in messages:
-                if m["role"] == "system":
-                    continue
-                role = "model" if m["role"] == "assistant" else m["role"]
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part.from_text(text=m["content"])],
+            # Immediate Fallback to Gemini without retrying/waiting on Groq rate limit
+            try:
+                from google.genai import types
+                gemini_client = self._init_client("gemini")
+                system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
+                contents = []
+                for m in messages:
+                    if m["role"] == "system":
+                        continue
+                    role = "model" if m["role"] == "assistant" else m["role"]
+                    contents.append(
+                        types.Content(
+                            role=role,
+                            parts=[types.Part.from_text(text=m["content"])],
+                        )
                     )
+                config = types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                    system_instruction=system_instruction,
                 )
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                system_instruction=system_instruction,
-            )
-            resp = gemini_client.models.generate_content(
-                model=settings.gemini_chat_model,
-                contents=contents,
-                config=config,
-            )
-            return resp.text
+                resp = gemini_client.models.generate_content(
+                    model=settings.gemini_chat_model,
+                    contents=contents,
+                    config=config,
+                )
+                return resp.text
+            except Exception as ge:
+                log.error("gemini_fallback_failed", error=str(ge))
+                raise ge
 
         if self.chat_provider == "gemini":
             from google.genai import types

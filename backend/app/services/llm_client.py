@@ -149,7 +149,7 @@ class LLMClient:
             except Exception as e:
                 log.warning("groq_chat_failed_falling_back_to_gemini_immediately", error=str(e))
             
-            # Immediate Fallback to Gemini without retrying/waiting on Groq rate limit
+            # Immediate Fallback to Gemini with model rotation
             try:
                 from google.genai import types
                 gemini_client = self._init_client("gemini")
@@ -170,12 +170,26 @@ class LLMClient:
                     max_output_tokens=max_tokens,
                     system_instruction=system_instruction,
                 )
-                resp = gemini_client.models.generate_content(
-                    model=settings.gemini_chat_model,
-                    contents=contents,
-                    config=config,
-                )
-                return resp.text
+                gemini_models = [
+                    settings.gemini_chat_model,
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-3.8-flash",
+                    "gemini-3.7-flash",
+                ]
+                for model_name in gemini_models:
+                    try:
+                        resp = gemini_client.models.generate_content(
+                            model=model_name, contents=contents, config=config,
+                        )
+                        text = resp.text
+                        if text and text.strip():
+                            return text
+                    except Exception as me:
+                        if "429" in str(me) or "RESOURCE_EXHAUSTED" in str(me):
+                            log.warning("groq_fallback_gemini_rotating", model=model_name)
+                            continue
+                        raise me
             except Exception as ge:
                 log.error("gemini_fallback_failed", error=str(ge))
                 raise ge
@@ -199,12 +213,39 @@ class LLMClient:
                 max_output_tokens=max_tokens,
                 system_instruction=system_instruction,
             )
-            resp = self._chat_client.models.generate_content(
-                model=settings.gemini_chat_model,
-                contents=contents,
-                config=config,
-            )
-            return resp.text
+            # Rotate across multiple Gemini models to avoid per-model RPD limits
+            # Each free-tier model gets ~20 RPD; cycling gives ~100+ RPD total
+            gemini_models = [
+                settings.gemini_chat_model,  # primary: gemini-3.6-flash
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-flash-lite",
+                "gemini-3.8-flash",
+                "gemini-3.7-flash",
+            ]
+            last_err = None
+            for model_name in gemini_models:
+                try:
+                    resp = self._chat_client.models.generate_content(
+                        model=model_name,
+                        contents=contents,
+                        config=config,
+                    )
+                    text = resp.text
+                    if text and text.strip():
+                        return text
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e)
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                        log.warning("gemini_model_rate_limited_rotating", model=model_name, error=err_str[:100])
+                        continue
+                    else:
+                        log.warning("gemini_model_error_rotating", model=model_name, error=err_str[:100])
+                        continue
+            # All models exhausted
+            if last_err:
+                raise last_err
+            raise RuntimeError("All Gemini models exhausted")
 
         if self.chat_provider == "aws_bedrock":
             import json

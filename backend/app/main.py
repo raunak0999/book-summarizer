@@ -86,18 +86,8 @@ def on_startup():
     except Exception as e:
         log.warning("embedding_warmup_failed", error=str(e))
 
-    # Sanity check chat model startup call
-    try:
-        from app.services.llm_client import get_llm_client
-        llm = get_llm_client()
-        llm.chat([{"role": "user", "content": "ping"}], max_tokens=5)
-        log.info("chat_model_sanity_check_passed", provider=llm.chat_provider)
-    except Exception as e:
-        err_str = str(e)
-        if "404" in err_str or "not_found" in err_str.lower() or "model_not_found" in err_str.lower():
-            log.error("chat_model_sanity_check_failed_404_model_not_found", error=err_str)
-        else:
-            log.warning("chat_model_sanity_check_failed", error=err_str)
+    # NOTE: Removed chat model sanity check to save free-tier RPD quota
+    log.info("chat_model_configured", provider=getattr(llm, 'chat_provider', 'unknown'))
 
     # Auto-recover books stuck in "processing" after a redeploy
     try:

@@ -41,17 +41,17 @@ class SummarizeState(TypedDict):
 
 def map_step(state: SummarizeState) -> SummarizeState:
     llm = get_llm_client()
-    # Batch chunks into larger sections to reduce API calls and run fast
-    batch_size = 6
+    # Use a single map call for the entire book (combine ALL chunks)
+    # to minimize API requests within free-tier RPD limits
     partials = []
     chunks = state["chunks"]
-    for i in range(0, len(chunks), batch_size):
-        batch = "\n\n---\n\n".join(chunks[i:i + batch_size])
-        messages = [
-            {"role": "system", "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary."},
-            {"role": "user", "content": f"Summarize the key events/ideas in the following excerpt in 4-6 sentences:\n\n{batch}"},
-        ]
-        partials.append(llm.chat(messages, temperature=0.2, max_tokens=1500))
+    # Join all chunks into one big batch — Gemini supports 1M token context
+    batch = "\n\n---\n\n".join(chunks)
+    messages = [
+        {"role": "system", "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary."},
+        {"role": "user", "content": f"Summarize the key events/ideas in the following book text in 8-12 sentences:\n\n{batch}"},
+    ]
+    partials.append(llm.chat(messages, temperature=0.2, max_tokens=1500))
     return {**state, "partial_summaries": partials}
 
 
@@ -74,24 +74,20 @@ def reduce_step(state: SummarizeState) -> SummarizeState:
 
 
 def verify_step(state: SummarizeState) -> SummarizeState:
+    """Accept on first attempt to save API calls (free-tier RPD is very limited)."""
     draft = state.get("draft_summary", "")
     attempt = state.get("attempt", 0)
     word_count = len(draft.split())
     log.info("verify_step_evaluating", attempt=attempt, word_count=word_count)
-
-    if (85 <= word_count <= 115) or (attempt >= 2):
-        final = draft if draft else "No summary available."
-        log.info("verify_step_accepted", attempt=attempt, word_count=word_count)
-        return {**state, "final_summary": final}
-
-    log.info("verify_step_rejected_requesting_rewrite", attempt=attempt, word_count=word_count)
-    return {**state, "final_summary": ""}
+    # Always accept to save API calls — the reduce prompt already enforces ~100 words
+    final = draft if draft else "No summary available."
+    log.info("verify_step_accepted", attempt=attempt, word_count=word_count)
+    return {**state, "final_summary": final}
 
 
 def route_after_verify(state: SummarizeState) -> str:
-    if state.get("final_summary") or state.get("attempt", 0) >= 2:
-        return END
-    return "reduce"
+    # Always END — no rewrite loop to save API calls
+    return END
 
 
 def build_summarize_graph():
@@ -107,7 +103,8 @@ def build_summarize_graph():
 
 
 def run_summarization(full_text: str) -> str:
-    chunks = chunk_text(full_text, chunk_size=2400, overlap=0)
+    # Use large chunks — Gemini supports 1M token context
+    chunks = chunk_text(full_text, chunk_size=8000, overlap=0)
     graph = build_summarize_graph()
     result = graph.invoke(
         {"chunks": chunks, "partial_summaries": [], "draft_summary": "", "final_summary": "", "attempt": 0},

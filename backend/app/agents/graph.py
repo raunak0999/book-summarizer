@@ -54,7 +54,7 @@ def map_step(state: SummarizeState) -> SummarizeState:
             {"role": "system", "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary."},
             {"role": "user", "content": f"Summarize the key events/ideas in the following excerpt in 4-6 sentences:\n\n{batch}"},
         ]
-        partials.append(llm.chat(messages, temperature=0.2, max_tokens=300))
+        partials.append(llm.chat(messages, temperature=0.2, max_tokens=1500))
     return {**state, "partial_summaries": partials}
 
 
@@ -72,7 +72,7 @@ def reduce_step(state: SummarizeState) -> SummarizeState:
             "Do not exceed 110 words or go below 90 words.\n\nNotes:\n" + joined
         )},
     ]
-    draft = llm.chat(messages, temperature=0.3, max_tokens=600)
+    draft = llm.chat(messages, temperature=0.3, max_tokens=2000)
     log.info("reduce_step_completed", attempt=attempt, word_count=len(draft.split()))
     return {**state, "draft_summary": draft, "attempt": attempt}
 
@@ -162,9 +162,9 @@ def make_qa_graph(retriever_fn):
 
         messages = [
             {"role": "system", "content": (
-                "You are a book Q&A assistant. Answer using ONLY the provided context chunks, in clear natural prose without interrupting the answer with inline citations. "
-                "If the answer isn't in the context, say you don't have enough information from the book. "
-                "At the very end of your answer, on a new line, list the chunk numbers you drew from like this: 'Sources: [chunk N, chunk M]'."
+                "You are a helpful book Q&A assistant. Answer the user's question using ONLY the provided context chunks in clear, natural, and friendly prose. "
+                "Do not output raw chunk labels or 'Sources: [chunk X]' text. "
+                "If the answer isn't in the context, politely state that you don't have enough information from the book."
             )},
 
             {"role": "user", "content": (

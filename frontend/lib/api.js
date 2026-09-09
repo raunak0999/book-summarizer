@@ -1,6 +1,12 @@
 let base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-if (base && !base.startsWith("http://") && !base.startsWith("https://")) {
-  base = `https://${base}`;
+if (base) {
+  base = base.replace(/_/g, "-");
+  if (!base.startsWith("http://") && !base.startsWith("https://")) {
+    base = `https://${base}`;
+  }
+  if (!base.includes("localhost") && !base.includes("127.0.0.1") && !base.includes(".")) {
+    base = `${base}.onrender.com`;
+  }
 }
 const API_BASE = base;
 const TOKEN_KEY = "book_agent_token"; // sessionStorage -> unique per browser tab/window

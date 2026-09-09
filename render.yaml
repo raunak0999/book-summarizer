@@ -2,11 +2,10 @@ services:
   # --- Backend FastAPI Web Service ---
   - type: web
     name: book-agent-backend
-    env: python
+    env: docker
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: Dockerfile
     envVars:
       - key: DATABASE_URL
         fromDatabase:

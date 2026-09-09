@@ -15,8 +15,11 @@ _st_model = None
 def _get_st_model():
     global _st_model
     if _st_model is None:
-        from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer(settings.local_embedding_model)
+        try:
+            from sentence_transformers import SentenceTransformer
+            _st_model = SentenceTransformer(settings.local_embedding_model)
+        except ImportError:
+            raise RuntimeError("sentence-transformers package is required for local embeddings. Set EMBEDDING_PROVIDER=gemini to use API embeddings.")
     return _st_model
 
 

@@ -73,24 +73,28 @@ class LLMClient:
         self._embed_client = self._init_client(self.embedding_provider)
 
     def _init_client(self, provider: str):
+        import httpx
         if provider == "azure_openai":
             from openai import AzureOpenAI
             return AzureOpenAI(
                 api_key=settings.azure_openai_api_key,
                 azure_endpoint=settings.azure_openai_endpoint,
                 api_version=settings.azure_openai_api_version,
+                http_client=httpx.Client(),
             )
         elif provider == "github_models":
             from openai import OpenAI
             return OpenAI(
                 base_url=settings.github_models_endpoint,
                 api_key=settings.github_models_token,
+                http_client=httpx.Client(),
             )
         elif provider == "groq":
             from openai import OpenAI
             return OpenAI(
                 base_url=settings.groq_endpoint,
                 api_key=settings.groq_api_key or "placeholder_key",
+                http_client=httpx.Client(),
             )
         elif provider == "gemini":
             from google import genai
@@ -100,7 +104,7 @@ class LLMClient:
             return boto3.client("bedrock-runtime", region_name=settings.aws_region)
         else:
             from openai import OpenAI
-            return OpenAI()
+            return OpenAI(http_client=httpx.Client())
 
     # ---- Chat completion ----
     @retry(

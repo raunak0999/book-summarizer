@@ -28,53 +28,56 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     # Enable pgvector extension + create tables if they don't exist.
-    with engine.connect() as conn:
-        try:
-            conn.execute(__import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.commit()
-            engine.dialect.has_pgvector = True
-        except Exception as e:
-            conn.rollback()
-            engine.dialect.has_pgvector = False
-            log.warning("pgvector_extension_failed_using_fallback", error=str(e))
-            conn.execute(__import__("sqlalchemy").text("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
-                        CREATE DOMAIN vector AS float8[];
-                    END IF;
-                END $$;
-                CREATE OR REPLACE FUNCTION vector_cosine_distance(a vector, b vector) RETURNS float8 AS $fn$
-                DECLARE
-                    dot_product float8 := 0;
-                    norm_a float8 := 0;
-                    norm_b float8 := 0;
-                    i int;
-                BEGIN
-                    FOR i IN 1..cardinality(a) LOOP
-                        dot_product := dot_product + (a[i] * b[i]);
-                        norm_a := norm_a + (a[i] * a[i]);
-                        norm_b := norm_b + (b[i] * b[i]);
-                    END LOOP;
-                    IF norm_a = 0 OR norm_b = 0 THEN
-                        RETURN 1.0;
-                    END IF;
-                    RETURN 1.0 - (dot_product / (sqrt(norm_a) * sqrt(norm_b)));
-                END;
-                $fn$ LANGUAGE plpgsql IMMUTABLE STRICT;
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM pg_operator WHERE oprname = '<=>' AND oprleft = 'vector'::regtype) THEN
-                        CREATE OPERATOR <=> (
-                            LEFTARG = vector,
-                            RIGHTARG = vector,
-                            FUNCTION = vector_cosine_distance
-                        );
-                    END IF;
-                END $$;
-            """))
-            conn.commit()
-    Base.metadata.create_all(bind=engine)
+    try:
+        with engine.connect() as conn:
+            try:
+                conn.execute(__import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.commit()
+                engine.dialect.has_pgvector = True
+            except Exception as e:
+                conn.rollback()
+                engine.dialect.has_pgvector = False
+                log.warning("pgvector_extension_failed_using_fallback", error=str(e))
+                conn.execute(__import__("sqlalchemy").text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
+                            CREATE DOMAIN vector AS float8[];
+                        END IF;
+                    END $$;
+                    CREATE OR REPLACE FUNCTION vector_cosine_distance(a vector, b vector) RETURNS float8 AS $fn$
+                    DECLARE
+                        dot_product float8 := 0;
+                        norm_a float8 := 0;
+                        norm_b float8 := 0;
+                        i int;
+                    BEGIN
+                        FOR i IN 1..cardinality(a) LOOP
+                            dot_product := dot_product + (a[i] * b[i]);
+                            norm_a := norm_a + (a[i] * a[i]);
+                            norm_b := norm_b + (b[i] * b[i]);
+                        END LOOP;
+                        IF norm_a = 0 OR norm_b = 0 THEN
+                            RETURN 1.0;
+                        END IF;
+                        RETURN 1.0 - (dot_product / (sqrt(norm_a) * sqrt(norm_b)));
+                    END;
+                    $fn$ LANGUAGE plpgsql IMMUTABLE STRICT;
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_operator WHERE oprname = '<=>' AND oprleft = 'vector'::regtype) THEN
+                            CREATE OPERATOR <=> (
+                                LEFTARG = vector,
+                                RIGHTARG = vector,
+                                FUNCTION = vector_cosine_distance
+                            );
+                        END IF;
+                    END $$;
+                """))
+                conn.commit()
+        Base.metadata.create_all(bind=engine)
+    except Exception as db_err:
+        log.warning("db_startup_initialization_warning", error=str(db_err))
     # Warm up local embedding model if configured
     try:
         from app.services.llm_client import get_llm_client

@@ -90,11 +90,11 @@ class LLMClient:
             from openai import OpenAI
             return OpenAI(
                 base_url=settings.groq_endpoint,
-                api_key=settings.groq_api_key,
+                api_key=settings.groq_api_key or "placeholder_key",
             )
         elif provider == "gemini":
             from google import genai
-            return genai.Client(api_key=settings.gemini_api_key)
+            return genai.Client(api_key=settings.gemini_api_key or "placeholder_key")
         elif provider == "aws_bedrock":
             import boto3
             return boto3.client("bedrock-runtime", region_name=settings.aws_region)

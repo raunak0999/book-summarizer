@@ -41,14 +41,11 @@ class SummarizeState(TypedDict):
 
 def map_step(state: SummarizeState) -> SummarizeState:
     llm = get_llm_client()
-    # Group chunks into batches of 4 and add a 2s delay between calls
-    # to stay under free-tier TPM rate limits (12,000 TPM).
-    batch_size = 4
+    # Batch chunks into larger sections to reduce API calls and run fast
+    batch_size = 6
     partials = []
     chunks = state["chunks"]
     for i in range(0, len(chunks), batch_size):
-        if i > 0:
-            time.sleep(2)
         batch = "\n\n---\n\n".join(chunks[i:i + batch_size])
         messages = [
             {"role": "system", "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary."},
@@ -59,7 +56,6 @@ def map_step(state: SummarizeState) -> SummarizeState:
 
 
 def reduce_step(state: SummarizeState) -> SummarizeState:
-    time.sleep(4)
     llm = get_llm_client()
     attempt = state.get("attempt", 0) + 1
 
@@ -111,7 +107,7 @@ def build_summarize_graph():
 
 
 def run_summarization(full_text: str) -> str:
-    chunks = chunk_text(full_text, chunk_size=settings.chunk_size_tokens, overlap=0)
+    chunks = chunk_text(full_text, chunk_size=2400, overlap=0)
     graph = build_summarize_graph()
     result = graph.invoke(
         {"chunks": chunks, "partial_summaries": [], "draft_summary": "", "final_summary": "", "attempt": 0},

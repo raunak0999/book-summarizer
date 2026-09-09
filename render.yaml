@@ -3,6 +3,7 @@ services:
   - type: web
     name: book-agent-backend
     env: python
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -34,6 +35,7 @@ services:
   - type: web
     name: book-agent-frontend
     env: node
+    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -48,3 +50,4 @@ databases:
   # --- Render PostgreSQL Database ---
   - name: book-agent-db
     databaseName: bookagent
+    plan: free

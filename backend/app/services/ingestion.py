@@ -33,12 +33,14 @@ def process_book(book_id: str, file_path: str, filename: str):
             db.commit()
             log.info("book_processed", book_id=book_id, pages=page_count, chunks=len(chunks))
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             db.rollback()
-            log.error("book_processing_failed", book_id=book_id, error=str(e).encode('ascii', 'replace').decode('ascii'))
+            log.error("book_processing_failed", book_id=book_id, error=str(e), traceback=tb_str)
             book = db.get(Book, book_id)
             if book:
                 book.status = "failed"
-                book.error_message = str(e)
+                book.error_message = f"{str(e)}\n\nTraceback:\n{tb_str}"
                 db.commit()
 
 

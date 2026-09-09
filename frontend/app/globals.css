@@ -1,4 +1,4 @@
-﻿/* ═══════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
 ═══════════════════════════════════════════════════════════════════ */
 :root {
@@ -518,4 +518,29 @@ a:hover { color: var(--orange-dark); text-decoration: underline; }
   .dropzone     { padding: 32px 16px 28px; }
   .chat-window  { max-height: 52vh; padding: 14px 10px; }
   .msg-bubble   { max-width: 92%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DELETE BUTTON
+═══════════════════════════════════════════════════════════════════ */
+.btn-delete {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.15s;
+}
+.btn-delete:hover {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: var(--red);
 }

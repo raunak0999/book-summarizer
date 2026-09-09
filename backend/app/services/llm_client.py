@@ -109,7 +109,7 @@ class LLMClient:
     # ---- Chat completion ----
     @retry(
         retry=retry_if_exception(_is_rate_limit_error),
-        stop=stop_after_attempt(10),
+        stop=stop_after_attempt(3),
         wait=_wait_rate_limit,
         reraise=True,
     )

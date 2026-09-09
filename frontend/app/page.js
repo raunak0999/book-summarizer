@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "../lib/api";
@@ -118,7 +118,21 @@ export default function Home() {
                 <li key={b.id} className="book-card">
                   <div className="book-card-top">
                     <span className="book-filename">{b.filename}</span>
-                    {statusBadge(b.status)}
+                    <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                      {statusBadge(b.status)}
+                      <button
+                        className="btn-delete"
+                        title="Delete this book"
+                        onClick={async () => {
+                          try {
+                            await api.deleteBook(b.id);
+                            await refresh();
+                          } catch (e) {
+                            setError(e.message);
+                          }
+                        }}
+                      >✕</button>
+                    </div>
                   </div>
                   {b.summary_100w && (
                     <p className="book-summary">{b.summary_100w}</p>

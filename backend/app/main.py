@@ -99,6 +99,27 @@ def on_startup():
         else:
             log.warning("chat_model_sanity_check_failed", error=err_str)
 
+    # Auto-recover books stuck in "processing" after a redeploy
+    try:
+        from datetime import datetime, timezone, timedelta
+        from app.core.db import SessionLocal
+        from app.models.models import Book
+        with SessionLocal() as db:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+            stuck = db.query(Book).filter(
+                Book.status == "processing",
+                Book.created_at < cutoff,
+            ).all()
+            for book in stuck:
+                book.status = "failed"
+                book.error_message = "Processing was interrupted by a server restart. Please delete this book and re-upload."
+                log.warning("auto_recovered_stuck_book", book_id=book.id, filename=book.filename)
+            if stuck:
+                db.commit()
+                log.info("stuck_books_recovered", count=len(stuck))
+    except Exception as e:
+        log.warning("stuck_book_recovery_failed", error=str(e))
+
     log.info("startup_complete")
 
 

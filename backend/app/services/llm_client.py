@@ -225,7 +225,7 @@ class LLMClient:
                 out.append(json.loads(resp["body"].read())["embedding"])
             return out
 
-        if self.embedding_provider == "gemini":
+        if self.embedding_provider in ("gemini", "api"):
             from google.genai import types
             config = types.EmbedContentConfig(output_dimensionality=settings.embedding_dim)
             res = self._embed_client.models.embed_content(

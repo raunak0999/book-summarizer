@@ -52,7 +52,6 @@ class Settings(BaseSettings):
     bedrock_model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
     # --- Chunking / RAG / Embeddings ---
-    embedding_provider: str = "api"  # "local" or "api"
     local_embedding_model: str = "all-MiniLM-L6-v2"
     chunk_size_tokens: int = 800
     chunk_overlap_tokens: int = 120

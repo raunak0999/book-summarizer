@@ -1,4 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+let base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+if (base && !base.startsWith("http://") && !base.startsWith("https://")) {
+  base = `https://${base}`;
+}
+const API_BASE = base;
 const TOKEN_KEY = "book_agent_token"; // sessionStorage -> unique per browser tab/window
 
 async function ensureToken() {

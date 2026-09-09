@@ -42,10 +42,9 @@ services:
         fromService:
           type: web
           name: book-agent-backend
-          property: url
+          property: host
 
 databases:
   # --- Render PostgreSQL Database ---
   - name: book-agent-db
     databaseName: bookagent
-    user: postgres

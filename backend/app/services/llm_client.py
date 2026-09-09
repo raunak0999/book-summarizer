@@ -141,7 +141,9 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            return resp.choices[0].message.content
+            msg = resp.choices[0].message
+            content = getattr(msg, "content", None) or getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None) or ""
+            return content.strip()
 
         if self.chat_provider == "gemini":
             from google.genai import types

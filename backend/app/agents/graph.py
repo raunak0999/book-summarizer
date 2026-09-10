@@ -41,17 +41,47 @@ class SummarizeState(TypedDict):
 
 def map_step(state: SummarizeState) -> SummarizeState:
     llm = get_llm_client()
-    # Use a single map call for the entire book (combine ALL chunks)
-    # to minimize API requests within free-tier RPD limits
-    partials = []
     chunks = state["chunks"]
-    # Join all chunks into one big batch — Gemini supports 1M token context
-    batch = "\n\n---\n\n".join(chunks)
-    messages = [
-        {"role": "system", "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary."},
-        {"role": "user", "content": f"Summarize the key events/ideas in the following book text in 8-12 sentences:\n\n{batch}"},
-    ]
-    partials.append(llm.chat(messages, temperature=0.2, max_tokens=1500))
+
+    # Process in groups of 5 chunks (~40k tokens/call) rather than one giant call.
+    # Sending all chunks at once can hit Gemini's per-minute token quota even within
+    # a single request (a 586-page book = ~233k tokens in one prompt).
+    GROUP_SIZE = 5
+    groups = [chunks[i:i + GROUP_SIZE] for i in range(0, len(chunks), GROUP_SIZE)]
+    expected = len(groups)
+    log.info("map_step_start", total_chunks=len(chunks), groups=expected)
+
+    partials = []
+    for idx, group in enumerate(groups):
+        batch = "\n\n---\n\n".join(group)
+        messages = [
+            {
+                "role": "system",
+                "content": "You compress book excerpts into concise plot/argument notes. Keep only what matters for an overall summary.",
+            },
+            {
+                "role": "user",
+                "content": f"Summarize the key events/ideas in the following book text in 8-12 sentences:\n\n{batch}",
+            },
+        ]
+        partial = llm.chat(messages, temperature=0.2, max_tokens=1500)
+        partials.append(partial)
+        log.info(
+            "map_step_group_complete",
+            group=f"{idx + 1}/{expected}",
+            collected=len(partials),
+        )
+
+    # Sanity check: every group should have produced exactly one summary
+    if len(partials) != expected:
+        log.warning(
+            "map_step_count_mismatch",
+            collected=len(partials),
+            expected=expected,
+        )
+    else:
+        log.info("map_step_complete", collected=len(partials), expected=expected)
+
     return {**state, "partial_summaries": partials}
 
 

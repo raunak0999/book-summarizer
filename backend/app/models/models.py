@@ -22,7 +22,7 @@ from sqlalchemy.types import UserDefinedType
 from pgvector.sqlalchemy import Vector as PGVector
 
 from app.core.db import Base
-from app.core.config import get_settings
+
 
 class Vector(UserDefinedType):
     cache_ok = True
@@ -53,9 +53,6 @@ class Vector(UserDefinedType):
                 return [float(x) for x in cleaned.split(",") if x.strip()]
             return value
         return process
-
-EMBED_DIM = get_settings().embedding_dim
-
 
 def gen_uuid():
     return str(uuid.uuid4())

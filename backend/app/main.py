@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
+from sqlalchemy import text
+from openai import RateLimitError, APIError
+
 from app.core.logging import configure_logging, RequestContextMiddleware, log
 from app.core.db import Base, engine
 from app.api import auth, books, chat
@@ -31,14 +34,14 @@ def on_startup():
     try:
         with engine.connect() as conn:
             try:
-                conn.execute(__import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 conn.commit()
                 engine.dialect.has_pgvector = True
             except Exception as e:
                 conn.rollback()
                 engine.dialect.has_pgvector = False
                 log.warning("pgvector_extension_failed_using_fallback", error=str(e))
-                conn.execute(__import__("sqlalchemy").text("""
+                conn.execute(text("""
                     DO $$
                     BEGIN
                         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
@@ -78,7 +81,6 @@ def on_startup():
         Base.metadata.create_all(bind=engine)
     except Exception as db_err:
         log.warning("db_startup_initialization_warning", error=str(db_err))
-    # Warm up local embedding model if configured (only for local provider to load model weights into RAM; skip remote API calls on boot to avoid 429 startup blocks)
     try:
         from app.services.llm_client import get_llm_client, _get_st_model
         llm = get_llm_client()
@@ -87,10 +89,9 @@ def on_startup():
             log.info("local_embedding_model_warmed_up")
         else:
             log.info("remote_embedding_provider_no_warmup_needed", provider=getattr(llm, 'embedding_provider', 'unknown'))
+        log.info("chat_model_configured", provider=getattr(llm, 'chat_provider', 'unknown'))
     except Exception as e:
         log.warning("embedding_warmup_failed", error=str(e))
-
-    log.info("chat_model_configured", provider=getattr(llm, 'chat_provider', 'unknown'))
 
     # Auto-recover books stuck in "processing" after a redeploy
     try:
@@ -122,8 +123,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                          content={"detail": exc.errors()})
 
-
-from openai import RateLimitError, APIError
 
 @app.exception_handler(RateLimitError)
 async def rate_limit_exception_handler(request: Request, exc: RateLimitError):

@@ -7,16 +7,8 @@ from app.core.config import get_settings
 from app.core.logging import log
 
 settings = get_settings()
+from app.services.llm_client import _is_rate_limit_error
 
-
-def _is_rate_limit_error(exc: Exception) -> bool:
-    """Detect 429 / 503 / RESOURCE_EXHAUSTED / UNAVAILABLE errors from any provider."""
-    msg = str(exc).lower()
-    return any(s in msg for s in (
-        "429", "503", "rate limit", "too many requests",
-        "resource_exhausted", "resourceexhausted",
-        "unavailable", "high demand", "overloaded",
-    ))
 
 
 def _count_existing_chunks(db, book_id: str) -> int:
@@ -71,3 +63,10 @@ def process_book(book_id: str, file_path: str, filename: str):
                     # Clean one-line message for the user; full traceback stays in server logs
                     book.error_message = str(e)
                 db.commit()
+        finally:
+            import os
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass

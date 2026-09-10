@@ -3,6 +3,9 @@ Single choke point for all model calls, so swapping providers (Azure
 OpenAI <-> AWS Bedrock) never touches agent/business logic (requirement
 #6.iii "modularity for future expansion").
 """
+import re
+from tenacity import retry, retry_if_exception, stop_after_attempt
+
 from app.core.config import get_settings
 from app.core.logging import log
 
@@ -22,10 +25,6 @@ def _get_st_model():
             raise RuntimeError("sentence-transformers package is required for local embeddings. Set EMBEDDING_PROVIDER=gemini to use API embeddings.")
     return _st_model
 
-
-import re
-import time
-from tenacity import retry, retry_if_exception, stop_after_attempt
 
 def _is_rate_limit_error(exc: Exception) -> bool:
     exc_str = str(exc).lower()
@@ -58,10 +57,6 @@ def _wait_rate_limit(retry_state) -> float:
     default_wait = min(5.0 * attempt, 30.0)
     log.warning("transient_or_rate_limit_retrying", default_wait_s=default_wait, attempt=attempt)
     return default_wait
-
-
-
-
 
 
 class LLMClient:
@@ -105,6 +100,57 @@ class LLMClient:
         else:
             from openai import OpenAI
             return OpenAI(http_client=httpx.Client())
+
+    def _chat_gemini_with_rotation(self, messages: list[dict], temperature: float, max_tokens: int) -> str:
+        from google.genai import types
+        gemini_client = self._chat_client if self.chat_provider == "gemini" else self._init_client("gemini")
+        system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
+        contents = []
+        for m in messages:
+            if m["role"] == "system":
+                continue
+            role = "model" if m["role"] == "assistant" else m["role"]
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=m["content"])],
+                )
+            )
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
+        gemini_models = [
+            settings.gemini_chat_model,
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+        ]
+        last_err = None
+        for model_name in gemini_models:
+            try:
+                resp = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config,
+                )
+                text = resp.text
+                if text and text.strip():
+                    return text
+            except Exception as e:
+                last_err = e
+                err_str = str(e)
+                if _is_rate_limit_error(e):
+                    log.warning("gemini_model_rate_limited_rotating", model=model_name, error=err_str[:100])
+                    continue
+                else:
+                    log.warning("gemini_model_error_rotating", model=model_name, error=err_str[:100])
+                    continue
+        if last_err:
+            raise last_err
+        raise RuntimeError("All Gemini models exhausted")
 
     # ---- Chat completion ----
     @retry(
@@ -155,103 +201,10 @@ class LLMClient:
             except Exception as e:
                 log.warning("groq_chat_failed_falling_back_to_gemini_immediately", error=str(e))
             
-            # Immediate Fallback to Gemini with model rotation
-            try:
-                from google.genai import types
-                gemini_client = self._init_client("gemini")
-                system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
-                contents = []
-                for m in messages:
-                    if m["role"] == "system":
-                        continue
-                    role = "model" if m["role"] == "assistant" else m["role"]
-                    contents.append(
-                        types.Content(
-                            role=role,
-                            parts=[types.Part.from_text(text=m["content"])],
-                        )
-                    )
-                config = types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                    system_instruction=system_instruction,
-                )
-                gemini_models = [
-                    settings.gemini_chat_model,
-                    "gemini-3.5-flash-lite",
-                    "gemini-3.1-flash-lite",
-                    "gemini-3.8-flash",
-                    "gemini-3.7-flash",
-                ]
-                for model_name in gemini_models:
-                    try:
-                        resp = gemini_client.models.generate_content(
-                            model=model_name, contents=contents, config=config,
-                        )
-                        text = resp.text
-                        if text and text.strip():
-                            return text
-                    except Exception as me:
-                        if _is_rate_limit_error(me):
-                            log.warning("groq_fallback_gemini_rotating", model=model_name, error=str(me)[:100])
-                            continue
-                        raise me
-            except Exception as ge:
-                log.error("gemini_fallback_failed", error=str(ge))
-                raise ge
+            return self._chat_gemini_with_rotation(messages, temperature, max_tokens)
 
         if self.chat_provider == "gemini":
-            from google.genai import types
-            system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
-            contents = []
-            for m in messages:
-                if m["role"] == "system":
-                    continue
-                role = "model" if m["role"] == "assistant" else m["role"]
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part.from_text(text=m["content"])],
-                    )
-                )
-            config = types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                system_instruction=system_instruction,
-            )
-            # Rotate across multiple Gemini models to avoid per-model RPD limits
-            # Each free-tier model gets ~20 RPD; cycling gives ~100+ RPD total
-            gemini_models = [
-                settings.gemini_chat_model,  # primary: gemini-3.6-flash
-                "gemini-3.5-flash-lite",
-                "gemini-3.1-flash-lite",
-                "gemini-3.8-flash",
-                "gemini-3.7-flash",
-            ]
-            last_err = None
-            for model_name in gemini_models:
-                try:
-                    resp = self._chat_client.models.generate_content(
-                        model=model_name,
-                        contents=contents,
-                        config=config,
-                    )
-                    text = resp.text
-                    if text and text.strip():
-                        return text
-                except Exception as e:
-                    last_err = e
-                    err_str = str(e)
-                    if _is_rate_limit_error(e):
-                        log.warning("gemini_model_rate_limited_rotating", model=model_name, error=err_str[:100])
-                        continue
-                    else:
-                        log.warning("gemini_model_error_rotating", model=model_name, error=err_str[:100])
-                        continue
-            # All models exhausted
-            if last_err:
-                raise last_err
-            raise RuntimeError("All Gemini models exhausted")
+            return self._chat_gemini_with_rotation(messages, temperature, max_tokens)
 
         if self.chat_provider == "aws_bedrock":
             import json
@@ -321,8 +274,6 @@ class LLMClient:
 
         resp = self._embed_client.embeddings.create(model="text-embedding-3-small", input=texts)
         return [d.embedding for d in resp.data]
-
-
 
 
 _llm_singleton: LLMClient | None = None

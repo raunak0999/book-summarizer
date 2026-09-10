@@ -16,12 +16,11 @@ Two LangGraph graphs:
 Both are plain LangGraph StateGraphs so they're easy to extend later
 (requirement #6.iii).
 """
-import time
-from typing import TypedDict, Optional
+from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
 from app.services.llm_client import get_llm_client
-from app.services.document_processing import chunk_text, count_tokens
+from app.services.document_processing import chunk_text
 from app.core.config import get_settings
 from app.core.logging import log
 
@@ -115,11 +114,6 @@ def verify_step(state: SummarizeState) -> SummarizeState:
     return {**state, "final_summary": final}
 
 
-def route_after_verify(state: SummarizeState) -> str:
-    # Always END — no rewrite loop to save API calls
-    return END
-
-
 def build_summarize_graph():
     g = StateGraph(SummarizeState)
     g.add_node("map", map_step)
@@ -128,7 +122,7 @@ def build_summarize_graph():
     g.set_entry_point("map")
     g.add_edge("map", "reduce")
     g.add_edge("reduce", "verify")
-    g.add_conditional_edges("verify", route_after_verify, {"reduce": "reduce", END: END})
+    g.add_edge("verify", END)
     return g.compile()
 
 
@@ -211,8 +205,6 @@ def make_qa_graph(retriever_fn):
                 raise exc
 
         return {**state, "answer": answer}
-
-
 
     def not_relevant(state: QAState) -> QAState:
         return {**state, "answer": "I couldn't find anything relevant to that question in this book."}

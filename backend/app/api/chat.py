@@ -1,8 +1,10 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.core.db import get_db
+from app.core.logging import log
 from app.core.security import get_current_user
 from app.models.models import Book, ChatMessage, User
 from app.models.schemas import QuestionRequest, AnswerResponse, ChatMessageOut
@@ -18,8 +20,6 @@ def _load_book_or_404(db: Session, book_id: str, user: User) -> Book:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
     return book
 
-
-import asyncio
 
 @router.post("", response_model=AnswerResponse)
 async def ask_question(
@@ -66,7 +66,6 @@ async def ask_question(
 
     sources = [r["ordinal"] for r in result["retrieved"]]
     return AnswerResponse(answer=result["answer"], sources=sources)
-
 
 
 @router.get("", response_model=list[ChatMessageOut])

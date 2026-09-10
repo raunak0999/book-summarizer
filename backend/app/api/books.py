@@ -38,7 +38,6 @@ async def upload_book(
         while chunk := await file.read(1024 * 1024):
             size += len(chunk)
             if size > settings.max_upload_mb * 1024 * 1024:
-                out.close()
                 os.remove(saved_path)
                 raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                                      detail=f"File exceeds {settings.max_upload_mb}MB limit")

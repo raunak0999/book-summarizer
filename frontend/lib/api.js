@@ -22,6 +22,11 @@ async function ensureToken() {
   return token;
 }
 
+async function handleResponseError(res, fallbackMsg) {
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body.detail ? JSON.stringify(body.detail) : `${fallbackMsg} (${res.status})`);
+}
+
 async function request(path, options = {}) {
   const token = await ensureToken();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -36,8 +41,7 @@ async function request(path, options = {}) {
     throw new Error("Session expired, please retry.");
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ? JSON.stringify(body.detail) : `Request failed (${res.status})`);
+    await handleResponseError(res, "Request failed");
   }
   if (res.status === 204) return null;
   return res.json();
@@ -57,8 +61,7 @@ export const api = {
       body: form,
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail ? JSON.stringify(body.detail) : `Upload failed (${res.status})`);
+      await handleResponseError(res, "Upload failed");
     }
     return res.json();
   },

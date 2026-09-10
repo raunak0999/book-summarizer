@@ -280,6 +280,7 @@ a:hover { color: var(--orange-dark); text-decoration: underline; }
 .badge-processing { background: var(--amber-bg);  color: var(--amber); }
 .badge-ready      { background: var(--green-bg);   color: var(--green); }
 .badge-failed     { background: var(--red-bg);     color: var(--red); }
+.badge-rate-limited { background: #FFF3E0;         color: #E65100; }
 .badge-unknown    { background: #F3F4F6;            color: var(--text-muted); }
 
 .empty-state {

@@ -137,7 +137,7 @@ export default function Home() {
                   {b.summary_100w && (
                     <p className="book-summary">{b.summary_100w}</p>
                   )}
-                  {b.status === "failed" && (
+                  {(b.status === "failed" || b.status === "rate_limited") && (
                     <p className="book-error">{b.error_message}</p>
                   )}
                   {b.status === "ready" && (
@@ -158,13 +158,15 @@ export default function Home() {
 
 function statusBadge(status) {
   const cls = {
-    processing: "badge-processing",
-    ready:      "badge-ready",
-    failed:     "badge-failed",
+    processing:    "badge-processing",
+    ready:         "badge-ready",
+    failed:        "badge-failed",
+    rate_limited:  "badge-rate-limited",
   };
+  const label = status === "rate_limited" ? "rate limited" : status;
   return (
     <span className={`badge ${cls[status] ?? "badge-unknown"}`}>
-      {status}
+      {label}
     </span>
   );
 }

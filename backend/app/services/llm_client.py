@@ -271,7 +271,7 @@ class LLMClient:
     # ---- Embeddings ----
     @retry(
         retry=retry_if_exception(_is_rate_limit_error),
-        stop=stop_after_attempt(5),
+        stop=stop_after_attempt(8),
         wait=_wait_rate_limit,
         reraise=True,
     )

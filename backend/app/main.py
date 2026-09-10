@@ -78,15 +78,18 @@ def on_startup():
         Base.metadata.create_all(bind=engine)
     except Exception as db_err:
         log.warning("db_startup_initialization_warning", error=str(db_err))
-    # Warm up local embedding model if configured
+    # Warm up local embedding model if configured (only for local provider to load model weights into RAM; skip remote API calls on boot to avoid 429 startup blocks)
     try:
-        from app.services.llm_client import get_llm_client
+        from app.services.llm_client import get_llm_client, _get_st_model
         llm = get_llm_client()
-        llm.embed(["warmup"])
+        if getattr(llm, "embedding_provider", None) == "local":
+            _get_st_model()
+            log.info("local_embedding_model_warmed_up")
+        else:
+            log.info("remote_embedding_provider_no_warmup_needed", provider=getattr(llm, 'embedding_provider', 'unknown'))
     except Exception as e:
         log.warning("embedding_warmup_failed", error=str(e))
 
-    # NOTE: Removed chat model sanity check to save free-tier RPD quota
     log.info("chat_model_configured", provider=getattr(llm, 'chat_provider', 'unknown'))
 
     # Auto-recover books stuck in "processing" after a redeploy

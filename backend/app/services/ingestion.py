@@ -27,6 +27,8 @@ def _count_existing_chunks(db, book_id: str) -> int:
 
 def process_book(book_id: str, file_path: str, filename: str):
     """Runs synchronously in a background task. Creates its own DB session."""
+    import structlog
+    structlog.contextvars.bind_contextvars(path="background_ingestion", book_id=book_id)
     with SessionLocal() as db:
         book = db.get(Book, book_id)
         if not book:

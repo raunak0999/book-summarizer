@@ -27,7 +27,7 @@
 - **Frontend**: Next.js (React). Single-page-ish app: upload page + history list + per-book chat page.
 - **Backend**: FastAPI, split into `api/` (routers), `core/` (config, db, security, logging), `models/` (SQLAlchemy + Pydantic), `services/` (document processing, RAG, LLM client, ingestion), `agents/` (LangGraph graphs). This separation is what makes it easy to add new agents, new file types, or a new LLM provider without touching unrelated code (modularity requirement).
 - **Database**: PostgreSQL with the `pgvector` extension for similarity search, in the same instance as normal relational tables (users, books, chunks, chat_messages) — no separate vector DB needed, keeping ops simple.
-- **LLM providers**: Independently configurable for chat and embeddings via two separate env vars (`CHAT_PROVIDER` / `EMBEDDING_PROVIDER`). All provider logic is isolated in `LLMClient` (`services/llm_client.py`) — switching providers is a config-only change.
+- **LLM providers**: Independently configurable for chat and embeddings via separate env vars (`CHAT_PROVIDER` / `EMBEDDING_PROVIDER`). All provider logic is isolated in `LLMClient` (`services/llm_client.py`). `CHAT_PROVIDER` uses Groq as primary (`openai/gpt-oss-20b`), with an automatic fallback mechanism that rotates across 5 Gemini models (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-flash`, `gemini-3.7-flash`) if Groq hits rate or daily token limits (TPD).
 
 ## 2. LLM Provider Design
 
@@ -35,7 +35,8 @@
 
 | Role | Provider | Model | Notes |
 |---|---|---|---|
-| Chat / completions | Groq | `groq/compound-mini` | Map-reduce summarizer + RAG Q&A generation |
+| Chat / completions (Primary) | Groq | `openai/gpt-oss-20b` | Map-reduce summarizer + RAG Q&A generation (with reasoning_format='hidden') |
+| Chat / completions (Fallback) | Google Gemini | Rotating 5 Flash models | Auto-fallback when Groq hits 429 / TPD / 503 limits; rotates through 5 models for ~100+ RPD |
 | Embeddings | Google Gemini | `gemini-embedding-001` | Chunk + query embeddings, 768-dim output |
 
 ### Why this split (development history)
@@ -44,9 +45,8 @@ During development this project evaluated several providers before settling on t
 
 - **Azure OpenAI** was the original target (planned default in the scaffold). Azure's access-approval process did not complete within the project timeline, so it could not be used as the primary provider, though the `LLMClient` fully supports it and it remains the recommended production target for a paid deployment.
 - **GitHub Models** (Azure inference proxy): tested and working for both chat and embeddings; hit per-day rate limits too quickly for iterative multi-call agentic pipeline testing.
-- **Gemini alone** (chat + embeddings): the free tier's **20 requests-per-day chat cap** was exhausted in a single testing session; the cap makes it unsuitable as the sole chat provider during development.
-- **Groq alone** (chat + embeddings): Groq's free tier provides generous chat RPM/RPD limits, but its embedding API is not available on all plans.
-- **Provider split solution**: Groq's generous chat limits and Gemini's generous embedding limits are complementary. Using Groq for chat and Gemini for embeddings avoided hitting either limit during iterative pipeline testing. A paid Azure OpenAI deployment would consolidate both back to a single provider with no code changes.
+- **Groq + Gemini Multi-Tier Fallback**: Groq free tier provides ultra-fast chat completions with `openai/gpt-oss-20b` but has a strict 200,000 TPD (Tokens Per Day) limit. Large books (500+ pages) consume ~280k tokens during map-reduce summarization, exhausting Groq's daily allowance. To handle this without failing, `LLMClient` automatically fails over to Gemini, rotating across 5 Flash model variants (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-flash`, `gemini-3.7-flash`) to multiply available RPD quota.
+- **Provider split solution**: Groq primary chat + Gemini rotation fallback + Gemini embeddings provides maximum resilience against rate limits and server availability spikes (503s). A paid Azure OpenAI deployment would consolidate both back to a single provider with no code changes.
 
 ### Configuration
 

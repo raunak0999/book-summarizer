@@ -192,8 +192,8 @@ class LLMClient:
                         if text and text.strip():
                             return text
                     except Exception as me:
-                        if "429" in str(me) or "RESOURCE_EXHAUSTED" in str(me):
-                            log.warning("groq_fallback_gemini_rotating", model=model_name)
+                        if _is_rate_limit_error(me):
+                            log.warning("groq_fallback_gemini_rotating", model=model_name, error=str(me)[:100])
                             continue
                         raise me
             except Exception as ge:
@@ -242,7 +242,7 @@ class LLMClient:
                 except Exception as e:
                     last_err = e
                     err_str = str(e)
-                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    if _is_rate_limit_error(e):
                         log.warning("gemini_model_rate_limited_rotating", model=model_name, error=err_str[:100])
                         continue
                     else:

@@ -29,13 +29,13 @@ from tenacity import retry, retry_if_exception, stop_after_attempt
 
 def _is_rate_limit_error(exc: Exception) -> bool:
     exc_str = str(exc).lower()
-    if "429" in exc_str or "rate limit" in exc_str or "too many requests" in exc_str or "resource_exhausted" in exc_str or "resourceexhausted" in exc_str:
+    if any(k in exc_str for k in ("429", "503", "rate limit", "too many requests", "resource_exhausted", "resourceexhausted", "unavailable", "high demand", "overloaded")):
         return True
-    if "remote end closed connection" in exc_str or "connection aborted" in exc_str or "remotedisconnected" in exc_str or "protocolerror" in exc_str:
+    if any(k in exc_str for k in ("remote end closed connection", "connection aborted", "remotedisconnected", "protocolerror")):
         return True
-    if hasattr(exc, "status_code") and getattr(exc, "status_code") == 429:
+    if hasattr(exc, "status_code") and getattr(exc, "status_code") in (429, 503):
         return True
-    if hasattr(exc, "code") and getattr(exc, "code") == 429:
+    if hasattr(exc, "code") and getattr(exc, "code") in (429, 503):
         return True
     return False
 

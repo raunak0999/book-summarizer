@@ -10,11 +10,12 @@ settings = get_settings()
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
-    """Detect 429 / RESOURCE_EXHAUSTED errors from any provider."""
+    """Detect 429 / 503 / RESOURCE_EXHAUSTED / UNAVAILABLE errors from any provider."""
     msg = str(exc).lower()
     return any(s in msg for s in (
-        "429", "rate limit", "too many requests",
+        "429", "503", "rate limit", "too many requests",
         "resource_exhausted", "resourceexhausted",
+        "unavailable", "high demand", "overloaded",
     ))
 
 

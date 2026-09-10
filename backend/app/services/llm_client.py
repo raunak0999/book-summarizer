@@ -141,11 +141,17 @@ class LLMClient:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    extra_body={
+                        "reasoning_format": "hidden",
+                        "reasoning_effort": "low",
+                    },
                 )
                 msg = resp.choices[0].message
-                content = getattr(msg, "content", None) or getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None) or ""
-                if content and content.strip():
-                    return content.strip()
+                content = getattr(msg, "content", None) or ""
+                # Strip out any residual <think>...</think> blocks if present
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                if content:
+                    return content
             except Exception as e:
                 log.warning("groq_chat_failed_falling_back_to_gemini_immediately", error=str(e))
             
